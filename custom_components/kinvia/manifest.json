@@ -1,7 +1,7 @@
 {
   "domain": "kinvia",
   "name": "Kinvia",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "config_flow": true,
   "documentation": "https://github.com/kinvia/integration#readme",
   "issue_tracker": "https://github.com/kinvia/integration/issues",
