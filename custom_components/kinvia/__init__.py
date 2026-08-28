@@ -10,7 +10,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.event import async_track_event
 
 from .const import (
     CONF_BATTERY_THRESHOLD,
@@ -75,10 +74,10 @@ class KinviaIncidentManager:
     async def async_start(self) -> None:
         await self.client.async_start()
         self._unsubscribers.append(
-            async_track_event(self.hass, EVENT_STATE_CHANGED, self._handle_state_changed)
+            self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._handle_state_changed)
         )
         self._unsubscribers.append(
-            async_track_event(self.hass, EVENT_REPAIRS_UPDATED, self._handle_repair_event)
+            self.hass.bus.async_listen(EVENT_REPAIRS_UPDATED, self._handle_repair_event)
         )
 
     async def async_stop(self) -> None:

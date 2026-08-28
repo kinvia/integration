@@ -8,7 +8,6 @@
   "codeowners": ["@kinvia"],
   "iot_class": "cloud_push",
   "integration_type": "service",
-  "requirements": ["aiohttp>=3.9.0"],
   "after_dependencies": ["repairs"],
   "loggers": ["custom_components.kinvia"]
 }
