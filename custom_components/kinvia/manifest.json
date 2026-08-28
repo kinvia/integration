@@ -1,0 +1,14 @@
+{
+  "domain": "kinvia",
+  "name": "Kinvia",
+  "version": "1.0.0",
+  "config_flow": true,
+  "documentation": "https://github.com/kinvia/integration#readme",
+  "issue_tracker": "https://github.com/kinvia/integration/issues",
+  "codeowners": ["@kinvia"],
+  "iot_class": "cloud_push",
+  "integration_type": "service",
+  "requirements": ["aiohttp>=3.9.0"],
+  "after_dependencies": ["repairs"],
+  "loggers": ["custom_components.kinvia"]
+}

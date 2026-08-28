@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar con Kinvia",
+        "description": "Introduce la URL base de tu instancia Kinvia y el Inbound Webhook Secret de la app Kinvia.",
+        "data": {
+          "url": "URL base de Kinvia",
+          "webhook_secret": "Inbound Webhook Secret"
+        }
+      },
+      "init": {
+        "title": "Opciones de monitorizaci\u00f3n",
+        "description": "Elige qu\u00e9 dominios y entidades monitorizar para incidencias.",
+        "data": {
+          "monitored_domains": "Dominios a monitorizar",
+          "excluded_entities": "Entidades excluidas",
+          "battery_threshold": "Umbral de bater\u00eda (%)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se pudo conectar con Kinvia. Comprueba la URL y que Kinvia sea accesible.",
+      "invalid_auth": "Webhook secret inv\u00e1lido.",
+      "invalid_url": "URL inv\u00e1lida. Usa http(s)://host:puerto sin barra final."
+    },
+    "abort": {
+      "already_configured": "Esta instancia de Kinvia ya est\u00e1 configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de monitorizaci\u00f3n Kinvia",
+        "data": {
+          "monitored_domains": "Dominios a monitorizar",
+          "excluded_entities": "Entidades excluidas",
+          "battery_threshold": "Umbral de bater\u00eda (%)"
+        }
+      }
+    }
+  }
+}
