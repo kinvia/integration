@@ -143,14 +143,11 @@ class KinviaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> KinviaOptionsFlow:
-        return KinviaOptionsFlow(config_entry)
+        return KinviaOptionsFlow()
 
 
 class KinviaOptionsFlow(config_entries.OptionsFlow):
     """Handle options for Kinvia."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
