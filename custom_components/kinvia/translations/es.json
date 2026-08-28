@@ -31,13 +31,22 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opciones de monitorizaci\u00f3n Kinvia",
+        "title": "Configuraci\u00f3n de Kinvia",
+        "description": "Actualiza la conexi\u00f3n con Kinvia y las opciones de monitorizaci\u00f3n.",
         "data": {
+          "url": "URL base de Kinvia",
+          "webhook_secret": "Inbound Webhook Secret",
           "monitored_domains": "Dominios a monitorizar",
           "excluded_entities": "Entidades excluidas",
           "battery_threshold": "Umbral de bater\u00eda (%)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "No se pudo conectar con Kinvia. Comprueba la URL y que Kinvia sea accesible.",
+      "invalid_auth": "Webhook secret inv\u00e1lido.",
+      "invalid_url": "URL inv\u00e1lida. Usa http(s)://host:puerto sin barra final.",
+      "already_configured": "Esta instancia de Kinvia ya est\u00e1 configurada."
     }
   }
 }

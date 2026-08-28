@@ -31,13 +31,22 @@
   "options": {
     "step": {
       "init": {
-        "title": "Kinvia monitoring options",
+        "title": "Kinvia settings",
+        "description": "Update your Kinvia connection and monitoring options.",
         "data": {
+          "url": "Kinvia base URL",
+          "webhook_secret": "Inbound Webhook Secret",
           "monitored_domains": "Monitored domains",
           "excluded_entities": "Excluded entities",
           "battery_threshold": "Battery threshold (%)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to Kinvia. Check the URL and that Kinvia is reachable.",
+      "invalid_auth": "Invalid webhook secret.",
+      "invalid_url": "Invalid URL. Use http(s)://host:port without a trailing slash.",
+      "already_configured": "This Kinvia instance is already configured."
     }
   }
 }
