@@ -7,8 +7,11 @@ from collections.abc import Callable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_URL
+from homeassistant.const import CONF_URL, __version__ as HA_VERSION
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
@@ -23,6 +26,7 @@ from .const import (
     EVENT_STATE_CHANGED,
 )
 from .incident import (
+    HaContext,
     IncidentPayload,
     StateSnapshot,
     build_repair_payload,
@@ -31,6 +35,8 @@ from .incident import (
 from .webhook import KinviaWebhookClient
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[str] = []
 
@@ -71,6 +77,73 @@ class KinviaIncidentManager:
     def _battery_threshold(self) -> int:
         return int(self._config.get(CONF_BATTERY_THRESHOLD, DEFAULT_BATTERY_THRESHOLD))
 
+    def _ha_context(self, entity_id: str | None = None) -> HaContext:
+        location = self.hass.config.location_name or ""
+        timezone = str(self.hass.config.time_zone)
+        if not entity_id:
+            return HaContext(
+                ha_version=HA_VERSION,
+                ha_location=location or None,
+                ha_timezone=timezone or None,
+            )
+
+        entity_registry = er.async_get(self.hass)
+        reg_entry = entity_registry.async_get(entity_id)
+        if not reg_entry:
+            return HaContext(
+                ha_version=HA_VERSION,
+                ha_location=location or None,
+                ha_timezone=timezone or None,
+            )
+
+        entity_registry_payload: dict[str, str] = {}
+        if reg_entry.platform:
+            entity_registry_payload["platform"] = reg_entry.platform
+        if reg_entry.config_entry_id:
+            entity_registry_payload["config_entry_id"] = reg_entry.config_entry_id
+        if reg_entry.device_id:
+            entity_registry_payload["device_id"] = reg_entry.device_id
+        if reg_entry.area_id:
+            entity_registry_payload["area_id"] = reg_entry.area_id
+
+        device_payload: dict[str, str] | None = None
+        area_id = reg_entry.area_id
+        if reg_entry.device_id:
+            device_registry = dr.async_get(self.hass)
+            device_entry = device_registry.async_get(reg_entry.device_id)
+            if device_entry:
+                device_payload = {"id": device_entry.id}
+                if device_entry.name:
+                    device_payload["name"] = device_entry.name
+                if device_entry.manufacturer:
+                    device_payload["manufacturer"] = device_entry.manufacturer
+                if device_entry.model:
+                    device_payload["model"] = device_entry.model
+                if device_entry.sw_version:
+                    device_payload["sw_version"] = device_entry.sw_version
+                if device_entry.hw_version:
+                    device_payload["hw_version"] = device_entry.hw_version
+                if not area_id and device_entry.area_id:
+                    area_id = device_entry.area_id
+
+        area_payload: dict[str, str] | None = None
+        if area_id:
+            area_registry = ar.async_get(self.hass)
+            area_entry = area_registry.async_get_area(area_id)
+            if area_entry:
+                area_payload = {"id": area_entry.id}
+                if area_entry.name:
+                    area_payload["name"] = area_entry.name
+
+        return HaContext(
+            ha_version=HA_VERSION,
+            ha_location=location or None,
+            ha_timezone=timezone or None,
+            device=device_payload,
+            area=area_payload,
+            entity_registry=entity_registry_payload or None,
+        )
+
     async def async_start(self) -> None:
         await self.client.async_start()
         self._unsubscribers.append(
@@ -106,13 +179,17 @@ class KinviaIncidentManager:
             battery_threshold=self._battery_threshold(),
             registry_device_class=registry_device_class,
             registry_friendly_name=registry_friendly_name,
+            context=self._ha_context(entity_id),
         )
         if payload:
             self.hass.async_create_task(self.client.async_enqueue(payload))
 
     @callback
     def _handle_repair_event(self, event: Event) -> None:
-        payload = build_repair_payload(dict(event.data))
+        payload = build_repair_payload(
+            dict(event.data),
+            context=self._ha_context(),
+        )
         self.hass.async_create_task(self.client.async_enqueue(payload))
 
 

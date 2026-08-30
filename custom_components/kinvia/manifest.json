@@ -1,13 +1,13 @@
 {
   "domain": "kinvia",
   "name": "Kinvia",
-  "version": "1.0.1",
+  "after_dependencies": ["repairs"],
+  "codeowners": ["@kinvia"],
   "config_flow": true,
   "documentation": "https://github.com/kinvia/integration#readme",
-  "issue_tracker": "https://github.com/kinvia/integration/issues",
-  "codeowners": ["@kinvia"],
-  "iot_class": "cloud_push",
   "integration_type": "service",
-  "after_dependencies": ["repairs"],
-  "loggers": ["custom_components.kinvia"]
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/kinvia/integration/issues",
+  "loggers": ["custom_components.kinvia"],
+  "version": "1.0.1"
 }
