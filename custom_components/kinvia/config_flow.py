@@ -17,9 +17,13 @@ from .const import (
     CONF_BATTERY_THRESHOLD,
     CONF_EXCLUDED_ENTITIES,
     CONF_MONITORED_DOMAINS,
+    CONF_STARTUP_BASELINE,
+    CONF_STARTUP_GRACE_MINUTES,
     CONF_WEBHOOK_SECRET,
     DEFAULT_BATTERY_THRESHOLD,
     DEFAULT_MONITORED_DOMAINS,
+    DEFAULT_STARTUP_BASELINE,
+    DEFAULT_STARTUP_GRACE_MINUTES,
     DOMAIN,
 )
 from .webhook import validate_connection
@@ -104,6 +108,23 @@ def _monitoring_options_schema(defaults: dict[str, Any]) -> vol.Schema:
                     unit_of_measurement="%",
                 )
             ),
+            vol.Required(
+                CONF_STARTUP_GRACE_MINUTES,
+                default=defaults.get(
+                    CONF_STARTUP_GRACE_MINUTES, DEFAULT_STARTUP_GRACE_MINUTES
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=60,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="min",
+                )
+            ),
+            vol.Required(
+                CONF_STARTUP_BASELINE,
+                default=defaults.get(CONF_STARTUP_BASELINE, DEFAULT_STARTUP_BASELINE),
+            ): selector.BooleanSelector(),
         }
     )
 
@@ -171,6 +192,8 @@ class KinviaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MONITORED_DOMAINS: user_input[CONF_MONITORED_DOMAINS],
                     CONF_EXCLUDED_ENTITIES: user_input[CONF_EXCLUDED_ENTITIES],
                     CONF_BATTERY_THRESHOLD: user_input[CONF_BATTERY_THRESHOLD],
+                    CONF_STARTUP_GRACE_MINUTES: user_input[CONF_STARTUP_GRACE_MINUTES],
+                    CONF_STARTUP_BASELINE: user_input[CONF_STARTUP_BASELINE],
                 },
             )
 
@@ -181,6 +204,8 @@ class KinviaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MONITORED_DOMAINS: DEFAULT_MONITORED_DOMAINS,
                     CONF_EXCLUDED_ENTITIES: [],
                     CONF_BATTERY_THRESHOLD: DEFAULT_BATTERY_THRESHOLD,
+                    CONF_STARTUP_GRACE_MINUTES: DEFAULT_STARTUP_GRACE_MINUTES,
+                    CONF_STARTUP_BASELINE: DEFAULT_STARTUP_BASELINE,
                 }
             ),
         )
@@ -235,6 +260,8 @@ class KinviaOptionsFlow(config_entries.OptionsFlow):
                     CONF_MONITORED_DOMAINS: user_input[CONF_MONITORED_DOMAINS],
                     CONF_EXCLUDED_ENTITIES: user_input[CONF_EXCLUDED_ENTITIES],
                     CONF_BATTERY_THRESHOLD: user_input[CONF_BATTERY_THRESHOLD],
+                    CONF_STARTUP_GRACE_MINUTES: user_input[CONF_STARTUP_GRACE_MINUTES],
+                    CONF_STARTUP_BASELINE: user_input[CONF_STARTUP_BASELINE],
                 },
             )
 

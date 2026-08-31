@@ -7,6 +7,8 @@ CONF_WEBHOOK_SECRET = "webhook_secret"
 CONF_MONITORED_DOMAINS = "monitored_domains"
 CONF_EXCLUDED_ENTITIES = "excluded_entities"
 CONF_BATTERY_THRESHOLD = "battery_threshold"
+CONF_STARTUP_GRACE_MINUTES = "startup_grace_minutes"
+CONF_STARTUP_BASELINE = "startup_baseline"
 
 DEFAULT_MONITORED_DOMAINS = [
     "light",
@@ -30,6 +32,8 @@ DEFAULT_MONITORED_DOMAINS = [
 ]
 
 DEFAULT_BATTERY_THRESHOLD = 15
+DEFAULT_STARTUP_GRACE_MINUTES = 10
+DEFAULT_STARTUP_BASELINE = True
 
 WEBHOOK_PATH = "/api/v1/webhooks/incidents"
 SERVER_HEALTH_PATH = "/health"
