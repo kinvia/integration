@@ -25,3 +25,4 @@ def _load_submodule(name: str):
 
 _load_submodule("const")
 _load_submodule("incident")
+_load_submodule("repair_sync")

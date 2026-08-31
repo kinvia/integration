@@ -32,8 +32,18 @@ Copy `custom_components/kinvia/` into your Home Assistant `config/custom_compone
 | Battery crosses below threshold | `battery_low` |
 | Entity → `problem` | `system_problem` |
 | `update` entity → `on` | `update_available` |
-| HA repair registry update | `repair_event` |
+| HA repair registry update | `repair_event` (`details.action`: `create`, `update`, or `remove`) |
 | Recovery events | `state_recovery`, `battery_recovered`, `problem_cleared`, `update_installed` |
+
+### Repairs (Spook / HA Repairs panel)
+
+The integration listens to `repairs_issue_registry_updated` and forwards the full event (including `action`) in `details`. Kinvia closes tickets when `action` is `remove` (issue deleted from the registry after a successful fix).
+
+- **Fix** in the Repairs UI (flow that deletes the issue) → `remove` → Kinvia should close the ticket.
+- **Ignore** in the Repairs UI → `update` only; the issue stays in the registry → ticket remains open until the issue is actually fixed.
+- Every **15 minutes**, Kinvia reconciles against the live issue registry and sends synthetic `remove`/`create` payloads if bus events were missed (e.g. webhook failure).
+
+Check HA logs for `Kinvia repair event` and `Kinvia repair reconcile` after fixing or ignoring repairs.
 
 Webhook: `POST {base_url}/api/v1/webhooks/incidents` with header `x-api-key: {webhook_secret}`.
 

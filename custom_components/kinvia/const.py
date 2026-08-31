@@ -38,4 +38,6 @@ WEBHOOK_HEALTH_PATH = "/api/v1/webhooks/health"
 EVENT_STATE_CHANGED = "state_changed"
 EVENT_REPAIRS_UPDATED = "repairs_issue_registry_updated"
 
+REPAIR_RECONCILE_INTERVAL_SECONDS = 900
+
 INVALID_STATES = frozenset({"unavailable", "unknown", "none", ""})

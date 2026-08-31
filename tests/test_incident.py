@@ -50,3 +50,16 @@ def test_build_repair_payload():
     payload = build_repair_payload({"issue_id": "test_issue"})
     assert payload.incident_type == "repair_event"
     assert payload.entity_id == "repairs.test_issue"
+
+
+def test_build_repair_payload_remove_action():
+    payload = build_repair_payload(
+        {
+            "action": "remove",
+            "domain": "spook",
+            "issue_id": "empty_floors_ground_floor",
+        }
+    )
+    assert payload.incident_type == "repair_event"
+    assert payload.entity_id == "repairs.empty_floors_ground_floor"
+    assert '"action":"remove"' in payload.details
