@@ -15,7 +15,9 @@
         "data": {
           "monitored_domains": "Monitored domains",
           "excluded_entities": "Excluded entities",
-          "battery_threshold": "Battery threshold (%)"
+          "battery_threshold": "Battery threshold (%)",
+          "startup_grace_minutes": "Startup grace period (minutes)",
+          "startup_baseline": "Report baseline state after startup grace"
         }
       }
     },
@@ -38,7 +40,9 @@
           "webhook_secret": "Inbound Webhook Secret",
           "monitored_domains": "Monitored domains",
           "excluded_entities": "Excluded entities",
-          "battery_threshold": "Battery threshold (%)"
+          "battery_threshold": "Battery threshold (%)",
+          "startup_grace_minutes": "Startup grace period (minutes)",
+          "startup_baseline": "Report baseline state after startup grace"
         }
       }
     },

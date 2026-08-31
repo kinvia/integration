@@ -1,6 +1,13 @@
 """Unit tests for incident classification."""
 
-from kinvia.incident import StateSnapshot, build_repair_payload, build_state_change_payload, classify_incident_type
+from kinvia.incident import (
+    StateSnapshot,
+    build_baseline_payload,
+    build_repair_payload,
+    build_state_change_payload,
+    classify_incident_type,
+    is_startup_suppressed_incident,
+)
 
 MONITORED = {"light", "switch", "binary_sensor", "sensor", "update"}
 EXCLUDED = {"sun.sun"}
@@ -63,3 +70,58 @@ def test_build_repair_payload_remove_action():
     assert payload.incident_type == "repair_event"
     assert payload.entity_id == "repairs.empty_floors_ground_floor"
     assert '"action":"remove"' in payload.details
+
+
+def test_startup_suppressed_incidents():
+    assert is_startup_suppressed_incident("state_change") is True
+    assert is_startup_suppressed_incident("state_recovery") is True
+    assert is_startup_suppressed_incident("battery_low") is False
+    assert is_startup_suppressed_incident("system_problem") is False
+
+
+def test_baseline_unavailable():
+    payload = build_baseline_payload(
+        "light.kitchen",
+        s("unavailable", friendly_name="Kitchen Light"),
+        monitored_domains=MONITORED,
+        excluded_entities=EXCLUDED,
+        battery_threshold=THRESHOLD,
+    )
+    assert payload is not None
+    assert payload.incident_type == "state_change"
+    assert payload.friendly_name == "Kitchen Light"
+    assert payload.old_state == ""
+
+
+def test_baseline_battery_low():
+    payload = build_baseline_payload(
+        "sensor.phone_battery",
+        s("10", device_class="battery"),
+        monitored_domains=MONITORED,
+        excluded_entities=EXCLUDED,
+        battery_threshold=THRESHOLD,
+    )
+    assert payload is not None
+    assert payload.incident_type == "battery_low"
+
+
+def test_baseline_healthy_entity():
+    payload = build_baseline_payload(
+        "light.kitchen",
+        s("on"),
+        monitored_domains=MONITORED,
+        excluded_entities=EXCLUDED,
+        battery_threshold=THRESHOLD,
+    )
+    assert payload is None
+
+
+def test_baseline_excluded_entity():
+    payload = build_baseline_payload(
+        "sun.sun",
+        s("unavailable"),
+        monitored_domains=MONITORED,
+        excluded_entities=EXCLUDED,
+        battery_threshold=THRESHOLD,
+    )
+    assert payload is None

@@ -179,6 +179,68 @@ def classify_incident_type(
     return None
 
 
+def is_startup_suppressed_incident(incident_type: str) -> bool:
+    """Return True if the incident should be dropped during startup grace period."""
+    return incident_type in {"state_recovery", "state_change"}
+
+
+def build_baseline_payload(
+    entity_id: str,
+    current_state: StateSnapshot,
+    *,
+    monitored_domains: set[str],
+    excluded_entities: set[str],
+    battery_threshold: int,
+    registry_device_class: str | None = None,
+    registry_friendly_name: str | None = None,
+    context: HaContext | None = None,
+) -> IncidentPayload | None:
+    """Report entities that are already in a problematic state after startup grace."""
+    if entity_id in excluded_entities:
+        return None
+
+    entity_domain = domain_for(entity_id)
+    if entity_domain not in monitored_domains:
+        return None
+
+    current = _state_value(current_state)
+    current_f = _float_or(current, 999)
+    dc = _device_class(current_state, registry_device_class)
+
+    friendly_name = entity_id
+    if current_state.attributes.get("friendly_name"):
+        friendly_name = str(current_state.attributes["friendly_name"])
+    elif registry_friendly_name:
+        friendly_name = registry_friendly_name
+
+    incident_type: str | None = None
+    if current in {"unavailable", "unknown"}:
+        incident_type = "state_change"
+    elif dc == "battery" and current_f < battery_threshold:
+        incident_type = "battery_low"
+    elif current == "problem":
+        incident_type = "system_problem"
+    elif entity_domain == "update" and current == "on":
+        incident_type = "update_available"
+
+    if not incident_type:
+        return None
+
+    return IncidentPayload(
+        incident_type=incident_type,
+        entity_id=entity_id,
+        friendly_name=friendly_name,
+        domain=entity_domain,
+        device_class=dc or "",
+        state=current,
+        details="",
+        old_state="",
+        new_state=state_to_dict(current_state),
+        old_state_obj=None,
+        context=context or HaContext(),
+    )
+
+
 def build_state_change_payload(
     entity_id: str,
     old_state: StateSnapshot | None,

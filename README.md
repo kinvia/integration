@@ -23,6 +23,8 @@ Copy `custom_components/kinvia/` into your Home Assistant `config/custom_compone
 | **Monitored domains** | Domains watched for disconnections and system problems |
 | **Excluded entities** | Entities to ignore (e.g. `sun.sun`) |
 | **Battery threshold** | Report when battery entities cross below this % (default 15) |
+| **Startup grace period** | Minutes after HA startup to suppress `state_change` and `state_recovery` noise (default 10; 0 = disabled) |
+| **Report baseline state** | After grace period, report entities still in a problematic state (default on) |
 
 ## What it reports
 
@@ -44,6 +46,16 @@ The integration listens to `repairs_issue_registry_updated` and forwards the ful
 - Every **15 minutes**, Kinvia reconciles against the live issue registry and sends synthetic `remove`/`create` payloads if bus events were missed (e.g. webhook failure).
 
 Check HA logs for `Kinvia repair event` and `Kinvia repair reconcile` after fixing or ignoring repairs.
+
+### Startup grace period
+
+On Home Assistant restart, hundreds of entities may briefly report `unavailable` or `unknown` while integrations and devices reconnect. To avoid flooding Kinvia with incidents:
+
+1. The integration waits for `EVENT_HOMEASSISTANT_STARTED` before listening to state changes.
+2. During the **startup grace period** (default 10 minutes), `state_change` and `state_recovery` incidents are suppressed.
+3. When grace ends, an optional **baseline scan** reports entities that are still unavailable, low battery, in `problem` state, or with pending updates.
+
+If you add the integration while HA is already running, grace and baseline are skipped and monitoring starts immediately.
 
 Webhook: `POST {base_url}/api/v1/webhooks/incidents` with header `x-api-key: {webhook_secret}`.
 

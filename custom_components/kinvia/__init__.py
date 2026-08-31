@@ -9,21 +9,25 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL, __version__ as HA_VERSION
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.start import async_at_started
 
 from .const import (
     CONF_BATTERY_THRESHOLD,
     CONF_EXCLUDED_ENTITIES,
     CONF_MONITORED_DOMAINS,
+    CONF_STARTUP_BASELINE,
+    CONF_STARTUP_GRACE_MINUTES,
     CONF_WEBHOOK_SECRET,
     DEFAULT_BATTERY_THRESHOLD,
     DEFAULT_MONITORED_DOMAINS,
+    DEFAULT_STARTUP_BASELINE,
+    DEFAULT_STARTUP_GRACE_MINUTES,
     DOMAIN,
     EVENT_REPAIRS_UPDATED,
     EVENT_STATE_CHANGED,
@@ -33,8 +37,10 @@ from .incident import (
     HaContext,
     IncidentPayload,
     StateSnapshot,
+    build_baseline_payload,
     build_repair_payload,
     build_state_change_payload,
+    is_startup_suppressed_incident,
 )
 from .repair_sync import diff_repair_snapshots, repair_keys_from_registry
 from .webhook import KinviaWebhookClient
@@ -69,6 +75,10 @@ class KinviaIncidentManager:
         self.client = client
         self._unsubscribers: list[Callable[[], None]] = []
         self._repair_snapshot: set[tuple[str, str]] = set()
+        self._grace_active = False
+        self._grace_unsub: Callable[[], None] | None = None
+        self._at_started_unsub: Callable[[], None] | None = None
+        self._skip_startup_grace = hass.state == CoreState.running
 
     @property
     def _config(self) -> dict[str, Any]:
@@ -82,6 +92,14 @@ class KinviaIncidentManager:
 
     def _battery_threshold(self) -> int:
         return int(self._config.get(CONF_BATTERY_THRESHOLD, DEFAULT_BATTERY_THRESHOLD))
+
+    def _startup_grace_minutes(self) -> int:
+        return int(
+            self._config.get(CONF_STARTUP_GRACE_MINUTES, DEFAULT_STARTUP_GRACE_MINUTES)
+        )
+
+    def _startup_baseline_enabled(self) -> bool:
+        return bool(self._config.get(CONF_STARTUP_BASELINE, DEFAULT_STARTUP_BASELINE))
 
     def _ha_context(self, entity_id: str | None = None) -> HaContext:
         location = self.hass.config.location_name or ""
@@ -153,6 +171,24 @@ class KinviaIncidentManager:
     async def async_start(self) -> None:
         await self.client.async_start()
         self._repair_snapshot = repair_keys_from_registry(self.hass)
+        self._at_started_unsub = async_at_started(self.hass, self._async_enable_monitoring)
+
+    async def async_stop(self) -> None:
+        if self._at_started_unsub is not None:
+            self._at_started_unsub()
+            self._at_started_unsub = None
+        if self._grace_unsub is not None:
+            self._grace_unsub()
+            self._grace_unsub = None
+        self._grace_active = False
+        for unsub in self._unsubscribers:
+            unsub()
+        self._unsubscribers.clear()
+        await self.client.async_stop()
+
+    @callback
+    def _async_enable_monitoring(self, _hass: HomeAssistant) -> None:
+        """Subscribe to HA events once Home Assistant has finished starting."""
         self._unsubscribers.append(
             self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._handle_state_changed)
         )
@@ -167,11 +203,79 @@ class KinviaIncidentManager:
             )
         )
 
-    async def async_stop(self) -> None:
-        for unsub in self._unsubscribers:
-            unsub()
-        self._unsubscribers.clear()
-        await self.client.async_stop()
+        grace_minutes = self._startup_grace_minutes()
+        if self._skip_startup_grace or grace_minutes <= 0:
+            return
+
+        self._grace_active = True
+        _LOGGER.info(
+            "Kinvia startup grace period active for %d minutes "
+            "(suppressing state_change and state_recovery incidents)",
+            grace_minutes,
+        )
+        self._grace_unsub = async_call_later(
+            self.hass,
+            timedelta(minutes=grace_minutes),
+            self._async_finish_startup_grace_callback,
+        )
+
+    @callback
+    def _async_finish_startup_grace_callback(self, _now: Any) -> None:
+        self.hass.async_create_task(self._async_finish_startup_grace())
+
+    async def _async_finish_startup_grace(self) -> None:
+        was_grace = self._grace_active
+        self._grace_active = False
+        if self._grace_unsub is not None:
+            self._grace_unsub()
+            self._grace_unsub = None
+
+        if was_grace:
+            _LOGGER.info("Kinvia startup grace period ended")
+
+        if was_grace and self._startup_baseline_enabled():
+            await self._async_emit_baseline()
+
+    async def _async_emit_baseline(self) -> None:
+        """Report entities already in a problematic state after startup settles."""
+        registry = er.async_get(self.hass)
+        payloads: list[IncidentPayload] = []
+
+        for state in self.hass.states.async_all():
+            entity_id = state.entity_id
+            reg_entry = registry.async_get(entity_id)
+            snapshot = _snapshot(state)
+            if snapshot is None:
+                continue
+
+            payload = build_baseline_payload(
+                entity_id,
+                snapshot,
+                monitored_domains=self._monitored_domains(),
+                excluded_entities=self._excluded_entities(),
+                battery_threshold=self._battery_threshold(),
+                registry_device_class=reg_entry.device_class if reg_entry else None,
+                registry_friendly_name=reg_entry.original_name if reg_entry else None,
+                context=self._ha_context(entity_id),
+            )
+            if payload:
+                payloads.append(payload)
+
+        if not payloads:
+            _LOGGER.debug("Kinvia startup baseline: no problematic entities found")
+            return
+
+        _LOGGER.info(
+            "Kinvia startup baseline: reporting %d entities in a problematic state",
+            len(payloads),
+        )
+        for payload in payloads:
+            await self.client.async_enqueue(payload)
+
+    def _should_report_state_incident(self, payload: IncidentPayload) -> bool:
+        if self._grace_active and is_startup_suppressed_incident(payload.incident_type):
+            return False
+        return True
 
     @callback
     def _handle_state_changed(self, event: Event) -> None:
@@ -195,7 +299,7 @@ class KinviaIncidentManager:
             registry_friendly_name=registry_friendly_name,
             context=self._ha_context(entity_id),
         )
-        if payload:
+        if payload and self._should_report_state_incident(payload):
             self.hass.async_create_task(self.client.async_enqueue(payload))
 
     @callback
