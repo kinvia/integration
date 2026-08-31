@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -13,6 +14,8 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     CONF_BATTERY_THRESHOLD,
@@ -24,6 +27,7 @@ from .const import (
     DOMAIN,
     EVENT_REPAIRS_UPDATED,
     EVENT_STATE_CHANGED,
+    REPAIR_RECONCILE_INTERVAL_SECONDS,
 )
 from .incident import (
     HaContext,
@@ -32,6 +36,7 @@ from .incident import (
     build_repair_payload,
     build_state_change_payload,
 )
+from .repair_sync import diff_repair_snapshots, repair_keys_from_registry
 from .webhook import KinviaWebhookClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +68,7 @@ class KinviaIncidentManager:
         self.entry = entry
         self.client = client
         self._unsubscribers: list[Callable[[], None]] = []
+        self._repair_snapshot: set[tuple[str, str]] = set()
 
     @property
     def _config(self) -> dict[str, Any]:
@@ -146,11 +152,19 @@ class KinviaIncidentManager:
 
     async def async_start(self) -> None:
         await self.client.async_start()
+        self._repair_snapshot = repair_keys_from_registry(self.hass)
         self._unsubscribers.append(
             self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._handle_state_changed)
         )
         self._unsubscribers.append(
             self.hass.bus.async_listen(EVENT_REPAIRS_UPDATED, self._handle_repair_event)
+        )
+        self._unsubscribers.append(
+            async_track_time_interval(
+                self.hass,
+                self._async_reconcile_repairs,
+                timedelta(seconds=REPAIR_RECONCILE_INTERVAL_SECONDS),
+            )
         )
 
     async def async_stop(self) -> None:
@@ -186,11 +200,59 @@ class KinviaIncidentManager:
 
     @callback
     def _handle_repair_event(self, event: Event) -> None:
+        event_data = dict(event.data)
+        action = event_data.get("action")
+        domain = str(event_data.get("domain", "unknown"))
+        issue_id = str(event_data.get("issue_id", "unknown"))
+        repair_key = (domain, issue_id)
+
+        if action == "remove":
+            self._repair_snapshot.discard(repair_key)
+        elif action in ("create", "update"):
+            self._repair_snapshot.add(repair_key)
+
+        _LOGGER.info(
+            "Kinvia repair event: action=%s domain=%s issue_id=%s",
+            action,
+            domain,
+            issue_id,
+        )
+
         payload = build_repair_payload(
-            dict(event.data),
+            event_data,
             context=self._ha_context(),
         )
         self.hass.async_create_task(self.client.async_enqueue(payload))
+
+    @callback
+    def _async_reconcile_repairs(self, _now: Any) -> None:
+        """Detect repairs removed from HA without a bus event (missed webhook path)."""
+        current = repair_keys_from_registry(self.hass)
+        added, removed = diff_repair_snapshots(self._repair_snapshot, current)
+        self._repair_snapshot = current
+
+        if not added and not removed:
+            return
+
+        _LOGGER.info(
+            "Kinvia repair reconcile: %d added, %d removed",
+            len(added),
+            len(removed),
+        )
+
+        for domain, issue_id in removed:
+            payload = build_repair_payload(
+                {"action": "remove", "domain": domain, "issue_id": issue_id},
+                context=self._ha_context(),
+            )
+            self.hass.async_create_task(self.client.async_enqueue(payload))
+
+        for domain, issue_id in added:
+            payload = build_repair_payload(
+                {"action": "create", "domain": domain, "issue_id": issue_id},
+                context=self._ha_context(),
+            )
+            self.hass.async_create_task(self.client.async_enqueue(payload))
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
