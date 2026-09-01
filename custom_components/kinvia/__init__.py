@@ -78,6 +78,7 @@ class KinviaIncidentManager:
         self._grace_active = False
         self._grace_unsub: Callable[[], None] | None = None
         self._at_started_unsub: Callable[[], None] | None = None
+        self._grace_touched_entities: set[str] = set()
         self._skip_startup_grace = hass.state == CoreState.running
 
     @property
@@ -181,6 +182,7 @@ class KinviaIncidentManager:
             self._grace_unsub()
             self._grace_unsub = None
         self._grace_active = False
+        self._grace_touched_entities.clear()
         for unsub in self._unsubscribers:
             unsub()
         self._unsubscribers.clear()
@@ -208,6 +210,7 @@ class KinviaIncidentManager:
             return
 
         self._grace_active = True
+        self._grace_touched_entities.clear()
         _LOGGER.info(
             "Kinvia startup grace period active for %d minutes "
             "(suppressing state_change and state_recovery incidents)",
@@ -237,17 +240,23 @@ class KinviaIncidentManager:
             await self._async_emit_baseline()
 
     async def _async_emit_baseline(self) -> None:
-        """Report entities already in a problematic state after startup settles."""
+        """Report entities that were noisy during grace and are still problematic."""
+        if not self._grace_touched_entities:
+            _LOGGER.debug(
+                "Kinvia startup baseline: no entities were suppressed during grace"
+            )
+            return
+
         registry = er.async_get(self.hass)
         payloads: list[IncidentPayload] = []
 
-        for state in self.hass.states.async_all():
-            entity_id = state.entity_id
-            reg_entry = registry.async_get(entity_id)
+        for entity_id in sorted(self._grace_touched_entities):
+            state = self.hass.states.get(entity_id)
             snapshot = _snapshot(state)
             if snapshot is None:
                 continue
 
+            reg_entry = registry.async_get(entity_id)
             payload = build_baseline_payload(
                 entity_id,
                 snapshot,
@@ -261,19 +270,26 @@ class KinviaIncidentManager:
             if payload:
                 payloads.append(payload)
 
+        self._grace_touched_entities.clear()
+
         if not payloads:
-            _LOGGER.debug("Kinvia startup baseline: no problematic entities found")
+            _LOGGER.debug(
+                "Kinvia startup baseline: suppressed entities have recovered"
+            )
             return
 
         _LOGGER.info(
-            "Kinvia startup baseline: reporting %d entities in a problematic state",
+            "Kinvia startup baseline: reporting %d entities still in a problematic state",
             len(payloads),
         )
         for payload in payloads:
             await self.client.async_enqueue(payload)
 
-    def _should_report_state_incident(self, payload: IncidentPayload) -> bool:
+    def _should_report_state_incident(
+        self, entity_id: str, payload: IncidentPayload
+    ) -> bool:
         if self._grace_active and is_startup_suppressed_incident(payload.incident_type):
+            self._grace_touched_entities.add(entity_id)
             return False
         return True
 
@@ -299,7 +315,7 @@ class KinviaIncidentManager:
             registry_friendly_name=registry_friendly_name,
             context=self._ha_context(entity_id),
         )
-        if payload and self._should_report_state_incident(payload):
+        if payload and self._should_report_state_incident(entity_id, payload):
             self.hass.async_create_task(self.client.async_enqueue(payload))
 
     @callback

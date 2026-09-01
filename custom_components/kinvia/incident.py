@@ -214,7 +214,7 @@ def build_baseline_payload(
         friendly_name = registry_friendly_name
 
     incident_type: str | None = None
-    if current in {"unavailable", "unknown"}:
+    if current == "unavailable":
         incident_type = "state_change"
     elif dc == "battery" and current_f < battery_threshold:
         incident_type = "battery_low"
