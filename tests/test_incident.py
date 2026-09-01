@@ -116,6 +116,17 @@ def test_baseline_healthy_entity():
     assert payload is None
 
 
+def test_baseline_unknown_is_ignored():
+    payload = build_baseline_payload(
+        "device_tracker.tablet",
+        s("unknown"),
+        monitored_domains=MONITORED,
+        excluded_entities=EXCLUDED,
+        battery_threshold=THRESHOLD,
+    )
+    assert payload is None
+
+
 def test_baseline_excluded_entity():
     payload = build_baseline_payload(
         "sun.sun",

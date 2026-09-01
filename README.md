@@ -53,7 +53,7 @@ On Home Assistant restart, hundreds of entities may briefly report `unavailable`
 
 1. The integration waits for `EVENT_HOMEASSISTANT_STARTED` before listening to state changes.
 2. During the **startup grace period** (default 10 minutes), `state_change` and `state_recovery` incidents are suppressed.
-3. When grace ends, an optional **baseline scan** reports entities that are still unavailable, low battery, in `problem` state, or with pending updates.
+3. When grace ends, an optional **baseline** reports only entities that had suppressed transitions during grace and are **still** unavailable (not `unknown`), low battery, in `problem` state, or with pending updates.
 
 If you add the integration while HA is already running, grace and baseline are skipped and monitoring starts immediately.
 
